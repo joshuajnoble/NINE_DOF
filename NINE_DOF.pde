@@ -32,6 +32,9 @@ const byte MAG_Z_L=0x06;
 #define HMC_POS_BIAS 1
 #define HMC_NEG_BIAS 2
 
+#define HMC58X3_R_XM 3
+#define HMC58X3_R_XL 4
+
 // HMC58X3 register map. For details see HMC58X3 datasheet
 #define HMC58X3_R_CONFA 0
 #define HMC58X3_R_CONFB 1
@@ -91,7 +94,6 @@ void setup()
   writemem(accelerometer_address, 0x2D, 16);
   writemem(accelerometer_address, 0x2D, 8);
 
-
   //magnetometer startup
   initMag();
   calibrateMag(1);
@@ -130,6 +132,57 @@ void initITG()
   
 }
 
+void initMag()
+{
+  writemem(magnetometer_address, HMC58X3_R_CONFA, 0x70);
+  writemem(magnetometer_address, HMC58X3_R_CONFB, 0xA0);
+  writemem(magnetometer_address, HMC58X3_R_MODE, 0x00);
+  
+}
+
+void calibrateMag(unsigned char gain) {
+  magx_scale=1; // get actual values
+  magy_scale=1;
+  magz_scale=1;
+  writemem(magnetometer_address, HMC58X3_R_CONFA, 0x010 + HMC_POS_BIAS); // Reg A DOR=0x010 + MS1,MS0 set to pos bias
+  
+  // set the gain
+  writemem(magnetometer_address, HMC58X3_R_CONFB, gain << 5);
+  
+  // now iniit
+  float x, y, z, mx=0, my=0, mz=0, t=10;
+  
+  byte buff[6];
+  
+  for (int i=0; i<(int)t; i++) { 
+    writemem(magnetometer_address, HMC58X3_R_MODE, 1); // calibration mode
+    delay(100);
+
+    readFromMagnet(&buff[0]);
+    
+    if (magVals[0] > mx) mx = x;
+    if (magVals[2] > my) my = y;
+    if (magVals[1] > mz) mz = z;
+  }
+  
+  float max=0;
+  if (mx>max) max=mx;
+  if (my>max) max=my;
+  if (mz>max) max=mz;
+  
+  magx_max = mx;
+  magy_max = my;
+  magz_max = mz;
+  magx_scale = max/mx; // calc scales
+  magy_scale = max/my;
+  magz_scale = max/mz;
+  writemem(magnetometer_address, HMC58X3_R_CONFA, 0x010); // set RegA/DOR back to default
+  delay(10);
+  // now set mode
+  writemem(magnetometer_address, HMC58X3_R_MODE, 0);
+  delay(100);
+}
+
 void writemem(uint8_t dev_address, uint8_t _addr, uint8_t _val) {
 
   Wire.beginTransmission(dev_address);   // start transmission to device 
@@ -164,7 +217,7 @@ void readmem(uint8_t dev_address, uint8_t _addr, uint8_t _nbytes, uint8_t _buff[
   Wire.send(_addr); // sends register address to read from
   Wire.endTransmission(); // end transmission
 
-    Wire.beginTransmission(dev_address); // start transmission to device 
+  Wire.beginTransmission(dev_address); // start transmission to device 
   Wire.requestFrom(dev_address, _nbytes);// send data n-bytes read
   uint8_t i = 0; 
   while (Wire.available()) {
@@ -204,7 +257,7 @@ void readFromAccel(byte *buff)
 
 void readFromMagnet(byte* buff)
 {
-  Wire.beginTransmission(magnetometer_address);
+  /*Wire.beginTransmission(magnetometer_address);
   Wire.send(HMC58X3_R_XM); // will start from DATA X MSB and fetch all the others
   Wire.endTransmission();
   
@@ -216,7 +269,22 @@ void readFromMagnet(byte* buff)
     magVals[1] = (Wire.receive() << 8) | Wire.receive();
     magVals[2] = (Wire.receive() << 8) | Wire.receive();
   }
-  Wire.endTransmission();
+  Wire.endTransmission();*/
+  
+  readmem(magnetometer_address, HMC58X3_R_XM, 6, buff);
+  
+  Serial.print(buff[0], DEC);
+  Serial.print(buff[1], DEC);
+  Serial.print(buff[2], DEC);
+  Serial.print(buff[3], DEC);
+  Serial.print(buff[4], DEC);
+  Serial.print(buff[5], DEC);
+  Serial.println("");
+  
+  magVals[0] = ((buff[0] << 8) | buff[1]);
+  magVals[2] = ((buff[2] << 8) | buff[3]); 
+  magVals[1] = ((buff[4] << 8) | buff[5]);
+
   
   /*magVals[0] = (float) (buff[0] | (buff[1]<<8)); 
   magVals[1] = (float) (buff[2] | (buff[3]<<8)); 
@@ -260,52 +328,6 @@ void debugWrite()
 
 }
 
-void initMag()
-{
-  writemem(magnetometer_address, HMC58X3_R_CONFA, 0x70);
-  writemem(magnetometer_address, HMC58X3_R_CONFB, 0xA0);
-  writemem(magnetometer_address, HMC58X3_R_MODE, 0x00);
-  
-}
-
-void calibrateMag(unsigned char gain) {
-  magx_scale=1; // get actual values
-  magy_scale=1;
-  magz_scale=1;
-  writemem(magnetometer_address, HMC58X3_R_CONFA, 0x010 + HMC_POS_BIAS); // Reg A DOR=0x010 + MS1,MS0 set to pos bias
-  writemem(magnetometer_address, HMC58X3_R_CONFB, gain << 5);
-  float x, y, z, mx=0, my=0, mz=0, t=10;
-  
-  byte buff[6];
-  
-  for (int i=0; i<(int)t; i++) { 
-    writemem(magnetometer_address, HMC58X3_R_MODE, 1); // calibration mode
-    delay(100);
-
-    readFromMagnet(&buff[0]);
-    
-    if (magVals[0] > mx) mx = x;
-    if (magVals[1] > my) my = y;
-    if (magVals[2] > mz) mz = z;
-  }
-  
-  float max=0;
-  if (mx>max) max=mx;
-  if (my>max) max=my;
-  if (mz>max) max=mz;
-  magx_max = mx;
-  magy_max = my;
-  magz_max = mz;
-  magx_scale = max/mx; // calc scales
-  magy_scale = max/my;
-  magz_scale = max/mz;
-  writemem(magnetometer_address, HMC58X3_R_CONFA, 0x010); // set RegA/DOR back to default
-  
-  // now set mode
-  writemem(magnetometer_address, HMC58X3_R_MODE, 0);
-  delay(100);
-}
-
 void loop()
 {
 
@@ -313,9 +335,11 @@ void loop()
 
   readFromAccel(&buffer[0]);
   readFromGyro(&buffer[0]);
-  //readFromMagnet(&buffer[0]);
+  readFromMagnet(&buffer[0]);
+  
+  delay(10);
 
-  debugWrite();
+  //debugWrite();
 
 }
 
