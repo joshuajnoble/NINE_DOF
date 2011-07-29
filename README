@@ -1,0 +1,1 @@
+This is an Arduino-compatible sketch for reading data from the Sparkfun 9DOF board. Right now I'm working with SEN-10321 not SEN-10724, so the magnetometer I'm coding for is the HMC5843, not the HMC5883L, but I'll rectify that soon enough.
